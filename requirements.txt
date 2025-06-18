@@ -1,0 +1,6 @@
+streamlit
+requests
+langchain==0.1.14
+langchain-google-genai==0.0.9
+streamlit-lottie
+python-dotenv
