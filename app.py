@@ -35,6 +35,16 @@ st.markdown(
         line-height: 1.6;
     }
 
+    .fun-fact-box {
+        background-color: #e1f5fe;
+        padding: 15px;
+        border-left: 8px solid #03a9f4;
+        border-radius: 10px;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 16px;
+        margin-top: 20px;
+    }
+
     h1, h2 {
         text-align: center;
         font-family: 'Segoe UI', sans-serif;
@@ -73,69 +83,103 @@ st_lottie(lottie_cook, speed=1, height=250, key="cooking_animation")
 st.markdown('<h1 class="emoji">🍲 AI Food Recipe Generator 🌮</h1>', unsafe_allow_html=True)
 st.markdown("<h2>Enter your main ingredients to get a recipe (e.g., chicken, tomato, spinach)</h2>", unsafe_allow_html=True)
 
-# User input for main ingredients
+# User input
 user_ingredients = st.text_input("Enter your main ingredients (comma-separated) 🍅🥬:")
 
-# Button to trigger recipe generation
+# Cuisine selection (AFTER ingredient input)
+cuisine_option = st.selectbox(
+    "Choose a cuisine style 🍽️:",
+    ["Indian", "Chinese", "Italian", "Mexican", "Thai", "French"],
+    index=0
+)
+
+# Save last inputs for retry
+if "last_ingredients" not in st.session_state:
+    st.session_state.last_ingredients = ""
+if "last_cuisine" not in st.session_state:
+    st.session_state.last_cuisine = ""
+
+# Recipe generation function
+def generate_recipe(ingredients, cuisine):
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+    prompt = PromptTemplate(
+        input_variables=["ingredients", "cuisine"],
+        template="""
+You are a professional chef AI that also knows about nutrition.
+
+Create a complete {cuisine} main course recipe using only the ingredients: {ingredients}.
+
+Important Rules:
+- Avoid adding any extra ingredients.
+- Assume basic pantry items (salt, water, oil, sugar, spices) and add only if needed.
+- Be creative and ensure the dish feels like authentic {cuisine} cuisine.
+
+Explicitly include the following estimated nutritional information **per serving**:
+1. Calories (kcal)
+2. Carbohydrates (g)
+3. Protein (g)
+4. Fat (g)
+5. Fiber (g)
+6. Sodium (mg)
+
+Output Format:
+1. Recipe Title 
+2. Ingredients List
+3. Preparation Steps (each step marked with a star ★)
+4. Estimated Cook Time
+5. Nutrient Chart per Serving (Estimated):
+    | Nutrient      | Amount   |
+    |---------------|----------|
+    | Calories      | ___ kcal |
+    | Carbohydrates | ___ g    |
+    | Protein       | ___ g    |
+    | Fat           | ___ g    |
+    | Fiber         | ___ g    |
+    | Sodium        | ___ mg   |
+"""
+    )
+    chain = LLMChain(llm=llm, prompt=prompt)
+    return chain.run({"ingredients": ingredients, "cuisine": cuisine})
+
+# Fun Fact generator function
+def get_fun_fact(ingredients):
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+    fun_fact_prompt = PromptTemplate(
+        input_variables=["ingredients"],
+        template="""
+You are a fun and informative culinary assistant.
+
+Give me a fun or surprising food fact that involves one or more of these ingredients: {ingredients}.
+
+The fact should be short, interesting, and suitable for general audiences.
+Only return the fact in 1–2 lines.
+"""
+    )
+    fact_chain = LLMChain(llm=llm, prompt=fun_fact_prompt)
+    return fact_chain.run({"ingredients": ingredients})
+
+# Generate recipe button
 if st.button("Generate Recipe 🍽️", key="generate_button"):
     if user_ingredients:
-        # Use the exact ingredients provided by the user
-        full_ingredients = user_ingredients
+        st.session_state.last_ingredients = user_ingredients
+        st.session_state.last_cuisine = cuisine_option
+        result = generate_recipe(user_ingredients, cuisine_option)
+        fun_fact = get_fun_fact(user_ingredients)
 
-        # Instantiate LLM
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
-
-        # Create prompt template
-        prompt = PromptTemplate(
-            input_variables=["ingredients"],
-            template="""
-            You are a professional chef AI that also knows about nutrition.
-
-            Create a complete main course recipe using only the ingredients: {ingredients}.
-
-            Important Rules:
-            - Avoid adding any extra ingredients.
-            - Assume basic pantry items (salt, water, oil, sugar, spices) only if required for cooking.
-            - Make it a main course dish – not a side or snack.
-            - Be creative and ensure the dish feels satisfying and complete.
-
-            Explicitly include the following estimated nutritional information **per serving** for the recipe:
-            1. Calories (kcal)
-            2. Carbohydrates (g)
-            3. Protein (g)
-            4. Fat (g)
-            5. Fiber (g)
-            6. Sodium (mg)
-
-            Output Format:
-            1. Recipe Title
-            2. Ingredients List
-            3. Preparation Steps (each step should marked with a symbol like star)
-            4. Estimated Cook Time
-            5. Nutrient Chart per Serving (Estimated):
-                | Nutrient      | Amount   |
-                |---------------|----------|
-                | Calories      | ___ kcal |
-                | Carbohydrates | ___ g    |
-                | Protein       | ___ g    |
-                | Fat           | ___ g    |
-                | Fiber         | ___ g    |
-                | Sodium        | ___ mg   |
-            """
-        )
-
-        # Create LLMChain
-        chain = LLMChain(llm=llm, prompt=prompt)
-
-        # Generate recipe
-        result = chain.run(full_ingredients)
-        st.success("Here’s your recipe! 🍽️")
-
-        # Display recipe
+        st.success(f"Here’s your {cuisine_option} recipe! 🍽️")
         st.markdown(f"<div class='recipe-container'>{result}</div>", unsafe_allow_html=True)
-
-        # Show animation for finished dish
+        st.markdown(f"<div class='fun-fact-box'>🧠 <strong>Fun Food Fact:</strong> {fun_fact}</div>", unsafe_allow_html=True)
         st_lottie(lottie_ready, speed=1, height=200, key="ready_dish")
-
     else:
         st.warning("Please enter some ingredients! 😕")
+
+# Retry button
+if st.session_state.last_ingredients:
+    if st.button("Not satisfied? Generate another recipe 🔁", key="retry_button"):
+        result = generate_recipe(st.session_state.last_ingredients, st.session_state.last_cuisine)
+        fun_fact = get_fun_fact(st.session_state.last_ingredients)
+
+        st.success(f"Here’s another {st.session_state.last_cuisine} recipe! 🍛")
+        st.markdown(f"<div class='recipe-container'>{result}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='fun-fact-box'>🧠 <strong>Fun Food Fact:</strong> {fun_fact}</div>", unsafe_allow_html=True)
+        st_lottie(lottie_ready, speed=1, height=200, key="ready_dish_2")
